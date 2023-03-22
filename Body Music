@@ -1,0 +1,142 @@
+//Audio compilation
+//Daniel Santos 
+
+let video;
+let poseNet;
+
+
+let posesX = [];
+let posesY = [];
+let skelPose = [];
+
+let w = 0;
+
+let bars = [];
+let playNotes = [];
+
+
+let chords = [
+  ['C4', 'G4', 'E4', 'B4', 'D5', 'A5'],
+  ['C4', 'G4', 'Eb4', 'Bb4', 'D5', 'A5'],
+  ['C4', 'G4', 'E4', 'Bb4', 'D5', 'A5'],
+  ['C4', 'G4', 'E4', 'Bb4', 'Db5', 'Ab5']
+];
+
+let notes = chords[0];
+
+let numBars = (notes.length * 2) - 1;
+
+let synth = new Tone.PolySynth(numBars, Tone.Synth).toMaster();
+
+
+function reflectArray(arr) {
+  let revArr = arr.slice().reverse();
+  arr.shift();
+  let fullArr = revArr.concat(arr);
+  return fullArr
+}
+
+function triggerSynth(time) {
+  playNotes = [];
+  for (let i = 0; i < numBars; i++) {
+    if (bars[i].playing) {
+      playNotes[i] = bars[i].note;
+    } else {
+      playNotes[i] = 0;
+    }
+  }
+ 
+  synth.triggerAttackRelease(playNotes, "4n");
+}
+
+function setup() {
+  createCanvas(640, 480);
+  if (modelReady) {
+    video = createCapture(VIDEO);
+    video.hide();
+  }
+
+  let notesPattern = reflectArray(notes);
+
+  w = width / numBars;
+  for (let i = 0; i < numBars; i++) {
+    bars.push(new Bar(w * i, w, notesPattern[i]))
+  }
+}
+
+function startPosenet() {
+  poseNet = ml5.poseNet(video, modelReady);
+  poseNet.on('pose', gotPoses);
+}
+
+function chooseChord() {
+  let e = document.getElementById("Chord Quality");
+  let chordIndex = e.options[e.selectedIndex].index;
+  notes = reflectArray(chords[chordIndex]);
+  for (let i = 0; i < bars.length; i++) {
+    bars[i].changeNote(notes[i]);
+  }
+
+}
+
+function gotPoses(poses) {
+  skelPose = poses;
+  posesX = [];
+  posesY = [];
+  if (poses.length > 0) {
+    for (let i = 0; i < poses[0].pose.keypoints.length; i++) {
+      if (poses[0].pose.keypoints[i].score > 0.3) {
+        posesX.push(poses[0].pose.keypoints[i].position.x);
+        posesY.push(poses[0].pose.keypoints[i].position.y);
+      }
+    }
+  }
+}
+
+function modelReady() {
+  console.log('model ready');
+  Tone.Transport.start();
+}
+
+Tone.Transport.scheduleRepeat(triggerSynth, '4n');
+
+function draw() {
+   image(video, 0, 0);
+     background(220, 200);
+  
+
+  for (let j = 0; j < bars.length; j++) {
+    bars[j].reset();
+  }
+
+  for (let i = 0; i < posesX.length; i++) {
+    for (let k = 0; k < bars.length; k++) {
+      bars[k].update(posesX[i]);
+      bars[k].display();
+    }
+  }
+  drawKeypoints();
+  drawSkeleton();
+}
+
+function drawKeypoints() {
+  for (let i = 0; i < posesX.length; i++) {
+    noStroke();
+    fill(255, 0, 189);
+    ellipse(posesX[i], posesY[i], 16);
+  }
+}
+
+function drawSkeleton() {
+  
+  for (let i = 0; i < skelPose.length; i++) {
+    let skeleton = skelPose[i].skeleton;
+   
+    for (let j = 0; j < skeleton.length; j++) {
+      let partA = skeleton[j][0];
+      let partB = skeleton[j][1];
+      stroke(255, 0, 0);
+      line(partA.position.x, partA.position.y, partB.position.x, partB.position.y);
+    }
+  }
+}
